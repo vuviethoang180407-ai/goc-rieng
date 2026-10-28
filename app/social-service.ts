@@ -3,6 +3,18 @@ class HttpError extends Error { constructor(public status:number,message:string)
 function fail(status:number,message:string):never{throw new HttpError(status,message)}
 function text(v:unknown,max:number,optional=false):string { if(typeof v!=="string") {if(optional && v==null)return "";fail(400,"Nội dung không hợp lệ.")}const s=v.trim();if((!optional&&!s)||s.length>max)fail(400,"Nội dung trống hoặc quá dài.");return s; }
 function date(v:unknown):string|null {if(v==null||v==="")return null;const s=text(v,40);const d=new Date(s);if(!Number.isFinite(d.getTime()))fail(400,"Ngày giờ không hợp lệ.");return d.toISOString()}
+function cleanSpace(value:any){
+    const s=value;if(!s||typeof s!=="object"||Array.isArray(s)||!Array.isArray(s.metrics)||s.metrics.length!==4)fail(400,"Cần đúng bốn chỉ số.");
+    for(const m of s.metrics){text(m.name,50);text(m.description,130,true);text(m.unit,20,true);if(!Number.isFinite(m.current)||m.current<0||!Number.isFinite(m.target)||m.target<=0)fail(400,"Giá trị chỉ số không hợp lệ.")}
+    for(const k of ["intention","learning","review","vision"])text(s[k],k==="intention"?150:5000,true);
+    if(!Array.isArray(s.notes)||!Array.isArray(s.tasks)||s.notes.length>300||s.tasks.length>300)fail(400,"Tối đa 300 ghi chép và 300 việc cá nhân.");
+    for(const n of s.notes)text(n?.text,300);
+    for(const t of s.tasks){text(t?.text,150);if(typeof t.done!=="boolean")fail(400,"Trạng thái việc không hợp lệ.");}
+
+    const clean={metrics:s.metrics.map((m:any)=>({name:m.name,current:m.current,target:m.target,unit:m.unit,description:m.description})),tasks:s.tasks.map((t:any)=>({text:t.text,done:t.done})),notes:s.notes.map((n:any)=>({text:n.text})),intention:s.intention||"",learning:s.learning||"",review:s.review||"",vision:s.vision||""};
+    const data=JSON.stringify(clean);if(data.length>60000)fail(400,"Không gian đã đầy. Hãy bớt ghi chép trước khi lưu.");
+    return clean;
+}
 export async function handleSocial(request:Request,db:D1Database,user:Identity|null):Promise<Response>{
  const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"}});
  try {
@@ -41,7 +53,8 @@ export async function handleSocial(request:Request,db:D1Database,user:Identity|n
     }else{p.tasks=[];p.members=[]}
    }
    const space=await one("SELECT data FROM spaces WHERE user_id=?",u);
-   return json({profile,friends,requests,plans,space:space?JSON.parse(space.data):null});
+   const publication=await one("SELECT token,updated FROM publications WHERE user_id=? AND active=1",u);
+   return json({profile,friends,requests,plans,space:space?JSON.parse(space.data):null,publication});
   }
   if(request.method!=="POST")fail(405,"Phương thức không hỗ trợ.");
   const raw=await request.text();if(raw.length>100000)fail(413,"Dữ liệu quá lớn.");
@@ -122,17 +135,32 @@ export async function handleSocial(request:Request,db:D1Database,user:Identity|n
     if(typeof body.done!=="boolean")fail(400,"Trạng thái không hợp lệ.");
     await run("UPDATE tasks SET done=? WHERE id=?",body.done?1:0,task.id);return json({ok:true});
    }
+   case "publish-space":{
+    const clean=cleanSpace(body.space);
+    const publication=await one("SELECT token,active FROM publications WHERE user_id=?",u);
+    const token=publication?.active?publication.token:crypto.randomUUID().replaceAll("-","");
+    const updated=now(),data=JSON.stringify({profile:{name:profile.name,bio:profile.bio},space:clean});
+    await run("INSERT INTO publications(user_id,token,data,active,updated) VALUES(?,?,?,1,?) ON CONFLICT(user_id) DO UPDATE SET token=excluded.token,data=excluded.data,active=1,updated=excluded.updated",u,token,data,updated);
+    return json({ok:true,token,updated});
+   }
+   case "unpublish-space":{
+    await run("UPDATE publications SET active=0 WHERE user_id=?",u);return json({ok:true});
+   }
    case "space":{
-    const s=body.space;if(!s||typeof s!=="object"||Array.isArray(s)||!Array.isArray(s.metrics)||s.metrics.length!==4)fail(400,"Cần đúng bốn chỉ số.");
-    for(const m of s.metrics){text(m.name,50);text(m.description,130,true);text(m.unit,20,true);if(!Number.isFinite(m.current)||m.current<0||!Number.isFinite(m.target)||m.target<=0)fail(400,"Giá trị chỉ số không hợp lệ.")}
-    for(const k of ["intention","learning","review","vision"])text(s[k],k==="intention"?150:5000,true);
-    if(!Array.isArray(s.notes)||!Array.isArray(s.tasks)||s.notes.length>300||s.tasks.length>300)fail(400,"Tối đa 300 ghi chép và 300 việc cá nhân.");
-    for(const n of s.notes)text(n?.text,300);
-    for(const t of s.tasks){text(t?.text,150);if(typeof t.done!=="boolean")fail(400,"Trạng thái việc không hợp lệ.");}
-    const data=JSON.stringify(s);if(data.length>60000)fail(400,"Không gian đã đầy. Hãy bớt ghi chép trước khi lưu.");
+    const data=JSON.stringify(cleanSpace(body.space));
     await run("INSERT INTO spaces(user_id,data) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data",u,data);return json({ok:true});
    }
    default:fail(400,"Thao tác không hợp lệ.");
   }
  }catch(e){if(e instanceof HttpError)return json({error:e.message},e.status);console.error("Social API error",e instanceof Error?e.message:"unknown");return json({error:"Không thể hoàn tất. Vui lòng thử lại."},500)}
+}
+
+
+// Anonymous readers can only fetch an explicitly published snapshot by its random token.
+export async function readPublication(db:D1Database,token:string){
+ if(!/^[a-f0-9]{32}$/.test(token))return null;
+ const row=await db.prepare("SELECT data,updated FROM publications WHERE token=? AND active=1").bind(token).first<{data:string;updated:string}>();
+ if(!row)return null;
+ const data=JSON.parse(row.data);
+ return {profile:{name:data.profile.name,bio:data.profile.bio},space:cleanSpace(data.space),updated:row.updated};
 }
