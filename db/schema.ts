@@ -29,3 +29,9 @@ export const tasks=sqliteTable("tasks",{
  title:text("title").notNull(), assignee:text("assignee").references(()=>profiles.id),
  dueAt:text("due_at"), done:integer("done").notNull().default(0), created:text("created").notNull(),
 },t=>[index("tasks_plan").on(t.planId)]);
+
+export const publications=sqliteTable("publications",{
+ userId:text("user_id").primaryKey().references(()=>profiles.id),
+ token:text("token").notNull().unique(),data:text("data").notNull(),
+ active:integer("active").notNull().default(1),updated:text("updated").notNull(),
+});
