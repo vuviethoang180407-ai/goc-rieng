@@ -1,15 +1,18 @@
 # Góc riêng
 
-**[Mở ứng dụng →](https://goc-rieng-workspace-271026.epiclion2049.chatgpt.site/)**
+**[Xem bài Góc riêng của Nick — không cần đăng nhập →](https://goc-rieng-workspace-271026.epiclion2049.chatgpt.site/share/39f7465c2553440aaa9e31b0d1f102e9)**
 
 Không gian làm việc cá nhân bằng tiếng Việt, với bốn chỉ số cốt lõi, ghi chép riêng tư và những kết nối có chọn lọc.
 
 ## Truy cập
 
-Mở đường link phía trên rồi đăng nhập bằng ChatGPT để sử dụng không gian của bạn. Muốn kết nối với người khác, vào **Bạn bè → Sao chép liên kết mời**.
+Mở đường link phía trên để xem bài Góc riêng của chủ trang ngay, không cần đăng nhập. Đây là bản công khai chỉ đọc, gồm các nội dung chủ trang đã chọn xuất bản.
+
+[Quản lý không gian cá nhân](https://goc-rieng-workspace-271026.epiclion2049.chatgpt.site/) cần đăng nhập. Trong phần quản lý, dùng **Chia sẻ trang của tôi** để cập nhật hoặc tắt bài công khai.
 
 ## Tính năng
 
+- Xuất bản trang tổng quan chỉ đọc qua link riêng, không yêu cầu khách đăng nhập.
 - Bốn chỉ số: tên, giá trị hiện tại, mục tiêu, mô tả và tiến độ.
 - Ghi chép, việc ưu tiên, tri thức, nhìn lại và mục tiêu cá nhân.
 - Kết bạn qua mã hoặc liên kết mời, có xác nhận của người nhận.
